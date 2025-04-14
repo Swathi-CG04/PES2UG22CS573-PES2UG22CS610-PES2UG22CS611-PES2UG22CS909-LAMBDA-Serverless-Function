@@ -1,0 +1,12 @@
+# Ignore virtual environments
+venv/
+__pycache__/
+*.pyc
+
+# Streamlit logs
+.streamlit/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+venv/

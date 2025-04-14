@@ -2,39 +2,37 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import uuid
-import docker_executor  # this must exist in your backend folder
+import docker_executor
 
 app = FastAPI()
-
-# In-memory "database" for function metadata
 functions_db = {}
 
-# Model for function metadata
 class FunctionMetadata(BaseModel):
     name: str
     route: str
     language: str
-    timeout: Optional[int] = 5  # default timeout 5 sec
+    timeout: Optional[int] = 5
+    code: Optional[str] = ""
 
-# Model for execute request body
 class ExecuteRequest(BaseModel):
-    code: str
+    code: Optional[str] = None
     language: str
     timeout: Optional[int] = 5
-
-@app.get("/")
-def root():
-    return {"message": "Serverless Function Platform"}
-
-# -------------------------------
-# CRUD: Function Metadata (Task 2)
-# -------------------------------
+    runtime: Optional[str] = "runc"
+    args: Optional[str] = ""
 
 @app.post("/functions/")
 def create_function(metadata: FunctionMetadata):
     func_id = str(uuid.uuid4())
     functions_db[func_id] = metadata
     return {"id": func_id, "metadata": metadata}
+
+@app.put("/functions/{func_id}")
+def update_function(func_id: str, metadata: FunctionMetadata):
+    if func_id in functions_db:
+        functions_db[func_id] = metadata
+        return {"id": func_id, "metadata": metadata}
+    raise HTTPException(status_code=404, detail="Function not found")
 
 @app.get("/functions/")
 def list_functions():
@@ -53,19 +51,37 @@ def delete_function(func_id: str):
         return {"message": "Function deleted"}
     raise HTTPException(status_code=404, detail="Function not found")
 
-# -------------------------------
-# Docker Execution Endpoint (Task 3)
-# -------------------------------
-
 @app.post("/execute")
 def execute_function(req: ExecuteRequest):
     try:
+        if not req.code:
+            raise HTTPException(status_code=422, detail="Code is required for ad-hoc execution")
+        code = req.code
+        if req.args:
+            code += f"\nprint({req.args})"
         output = docker_executor.execute_function(
-            code=req.code,
+            code=code,
             language=req.language,
-            timeout=req.timeout
+            timeout=req.timeout,
+            runtime=req.runtime
         )
         return output if isinstance(output, dict) else {"output": output, "status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/functions/{func_id}/execute")
+def execute_stored_function(func_id: str, req: ExecuteRequest):
+    if func_id not in functions_db:
+        raise HTTPException(status_code=404, detail="Function not found")
+
+    meta = functions_db[func_id]
+    full_code = meta.code
+    if req.args:
+        full_code += f"\nprint({req.args})"
+
+    return docker_executor.execute_function(
+        code=full_code,
+        language=meta.language,
+        timeout=meta.timeout,
+        runtime=req.runtime
+    )
