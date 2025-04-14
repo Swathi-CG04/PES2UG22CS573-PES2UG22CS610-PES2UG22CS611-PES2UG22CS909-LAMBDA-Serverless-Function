@@ -9,11 +9,12 @@ def execute_function(code: str, language: str, timeout: int = 5):
     if language == "python":
         file_name = "user_code.py"
         docker_image = "lambda-python"
-        dockerfile_path = "./docker-images/python-base"
+        dockerfile_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../docker-images/python-base"))
     elif language == "javascript":
         file_name = "user_code.js"
         docker_image = "lambda-js"
-        dockerfile_path = "./docker-images/js-base"
+        dockerfile_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../docker-images/js-base"))
+
     else:
         return {"error": "Unsupported language"}
 
@@ -28,7 +29,7 @@ def execute_function(code: str, language: str, timeout: int = 5):
     try:
         result = subprocess.run([
             "docker", "run", "--rm",
-            "-v", f"{os.path.abspath(temp_dir)}:/app",
+            "-v", f"{os.path.abspath(temp_dir)}:/app/usercode",
             docker_image
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
 
